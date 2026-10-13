@@ -3,12 +3,17 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    @apply min-h-full;
+  }
+
   body { 
     font-family: 'Inter', sans-serif; 
-    @apply bg-slate-50 text-slate-900 h-screen overflow-hidden selection:bg-blue-100 selection:text-blue-900;
+    @apply min-h-screen bg-slate-50 text-slate-900 overflow-x-hidden selection:bg-blue-100 selection:text-blue-900;
   }
+
   #root {
-    @apply w-full h-full flex;
+    @apply min-h-screen w-full;
   }
 }
 
