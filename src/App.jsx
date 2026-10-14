@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useSyncExternalStore } from 'react';
 import { 
     Moon, Sun, Menu, Search, User, UserPlus, MessageSquare, 
     Users, FileText, Settings, Video, Shield, CreditCard, 
@@ -9,6 +9,7 @@ import {
     Printer, Download, List, Info, ChevronUp, File
 } from 'lucide-react';
 import AdminApp from './AdminApp.jsx';
+import { getAdminSettings, subscribeAdminSettings } from './data/adminSettings.js';
 
 const globalStyles = `
 @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;1,8..60,400&display=swap');
@@ -90,6 +91,7 @@ window.AdminLogs = window.AdminLogs || { zeroResults: [], searchClicks: [], feed
 const logZeroResult = (query) => window.AdminLogs.zeroResults.push({ query, timestamp: new Date().toISOString() });
 const logSearchClick = (query, articleId, position) => window.AdminLogs.searchClicks.push({ query, articleId, position, timestamp: new Date().toISOString() });
 const logFeedback = (data) => window.AdminLogs.feedback.push({ ...data, timestamp: new Date().toISOString() });
+const useFeedbackReasons = () => useSyncExternalStore(subscribeAdminSettings, () => getAdminSettings().feedbackReasons, () => getAdminSettings().feedbackReasons);
 
 const CURRENT_DATE = new Date('2026-10-12');
 const isWithin30Days = (dateStr) => {
@@ -899,6 +901,7 @@ const SearchBox = ({ variant = 'hero', initialQuery = '', navigate }) => {
 };
 
 const FeedbackWidget = ({ articleId, version }) => {
+    const feedbackReasons = useFeedbackReasons();
     const [state, setState] = useState('initial');
     const [reason, setReason] = useState(null);
     const [text, setText] = useState('');
@@ -922,21 +925,22 @@ const FeedbackWidget = ({ articleId, version }) => {
             <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-6 transition-all shadow-sm">
                 <h4 className="font-semibold mb-4 text-[var(--text)]">How can we improve this article?</h4>
                 <div className="flex flex-wrap gap-2 mb-4">
-                    {['Out of date', 'Incorrect', 'Incomplete', 'Hard to follow'].map(r => (
-                        <button key={r} onClick={() => setReason(r)} className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${reason === r ? 'bg-[var(--amber)] border-[var(--amber)] text-[var(--navy)]' : 'bg-[var(--bg)] border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--amber)]'}`}>
+                    {feedbackReasons.map(r => (
+                        <button key={r} aria-pressed={reason === r} onClick={() => setReason(r)} className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${reason === r ? 'bg-[var(--amber)] border-[var(--amber)] text-[var(--navy)]' : 'bg-[var(--bg)] border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--amber)]'}`}>
                             {r}
                         </button>
                     ))}
                 </div>
-                <textarea 
-                    placeholder="Tell us more (optional)" 
+                {reason && <textarea
+                    aria-label={reason === 'Other' ? 'Describe the other reason' : 'Additional feedback'}
+                    placeholder={reason === 'Other' ? 'Tell us what went wrong (required)' : 'Tell us more (optional)'}
                     value={text} onChange={(e) => setText(e.target.value)}
                     className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg p-3 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] mb-4 focus:ring-1 focus:ring-[var(--amber)] focus:border-[var(--amber)] no-focus-outline resize-none"
                     rows={3}
-                />
+                />}
                 <div className="flex justify-end gap-3">
                     <button onClick={() => setState('initial')} className="px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:text-[var(--text)] transition-colors">Cancel</button>
-                    <button onClick={() => handleSubmit('no', reason, text)} disabled={!reason && !text} className="px-4 py-2 bg-[var(--amber)] text-[var(--navy)] rounded-lg text-sm font-semibold hover:bg-[var(--amber-hover)] disabled:opacity-50 disabled:pointer-events-none transition-colors shadow-sm">Send feedback</button>
+                    <button onClick={() => handleSubmit('no', reason, text)} disabled={!reason || (reason === 'Other' && !text.trim())} className="px-4 py-2 bg-[var(--amber)] text-[var(--navy)] rounded-lg text-sm font-semibold hover:bg-[var(--amber-hover)] disabled:opacity-50 disabled:pointer-events-none transition-colors shadow-sm">Send feedback</button>
                 </div>
             </div>
         );
@@ -1797,17 +1801,18 @@ export default function App() {
         if (storedMode === 'admin' || storedMode === 'reviewer') return 'admin-reviewer';
         return storedMode;
     });
-    const [theme, setTheme] = useState('light');
+    const [theme, setTheme] = useState(() => {
+        const storedTheme = localStorage.getItem('theme');
+        if (storedTheme === 'light' || storedTheme === 'dark') return storedTheme;
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
+        return 'light';
+    });
     const [currentRoute, setCurrentRoute] = useState({
         path: toAppPath(window.location.pathname),
         searchParams: new URLSearchParams(window.location.search || '')
     });
 
     useEffect(() => {
-        const storedTheme = localStorage.getItem('theme');
-        if (storedTheme) setTheme(storedTheme);
-        else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) setTheme('dark');
-
         const handlePopState = () => setCurrentRoute({ path: toAppPath(window.location.pathname), searchParams: new URLSearchParams(window.location.search) });
         window.addEventListener('popstate', handlePopState);
         return () => window.removeEventListener('popstate', handlePopState);
